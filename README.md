@@ -10,8 +10,8 @@ Downloader also uses pythons multiprocessing module for concurrent download.
 ### Usage
 
 ```sh
-downloader links_file.txt				# Downloads files from links specified in links_file.txt
-downloader -n links_file.txt 		# Downloads pages and tries to get information using CSS selector.
+downloader links_file.txt	# Downloads files from links specified in links_file.txt
+downloader -n links_file.txt 	# Downloads pages and tries to get information using CSS selector.
 ```
 
 ## Journal Entry
@@ -33,8 +33,8 @@ files based on a keyword (generally the script language).
 ### Usage
 
 ```sh
-ns green 			# Creates a script called green with the default template boilerplate.
-ns py blue		# Creates a script called open, and fills it with the boilerplate from py.
+ns green 	# Creates a script called green with the default template boilerplate.
+ns py blue	# Creates a script called open, and fills it with the boilerplate from py.
 ```
 
 ## Sort Files
@@ -44,10 +44,11 @@ Sort files, uses Linux's link system to organize files into directories based on
 ### Usage
 
 ```sh
-sort_files path/to/files		# Sorts files in path/to/files using only the date based criteria
-sort_files -o path/to/output_dir path/to/files warm 		# Sorts files into another directory using
-																													# "warm" and dates as criteria. Output
-																													# directory is useful for SMB/Cifs
-																													# directories that do not support Linux
-																													# links.
+sort_files path/to/files	# Sorts files in path/to/files using only the date based criteria
+
+sort_files -o path/to/output_dir path/to/files warm 	# Sorts files into another directory using
+							 # "warm" and dates as criteria. Output
+							 # directory is useful for SMB/Cifs
+							 # directories that do not support Linux
+							 # links.
 ```
