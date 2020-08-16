@@ -1,0 +1,107 @@
+#!/bin/env python
+
+# Generates other scripts and handles some of the boilerplate code.
+# 
+# Specifically:
+# - shebang header
+# - any common imports if it the scripting language needs them
+# - executable bit toggled
+# - opening in $EDITOR at the end of file for quick access
+
+__doc__ = """ns
+
+Creates a new script file with provided name, proper permissions, and boiler plate based on a
+language. This removes the hassle of having to create, chmod, and open in an editor.
+
+Usage:
+    ns <name>
+    ns [<type>] <name>
+
+Arguments:
+    <name>              name of the script file
+    [<type>]            type of script file, default is python
+"""
+
+import os, sys, sh, textwrap
+from docopt import docopt
+from os import path as pt
+
+templates = {
+        "python": {
+            "position" : "3",
+            "template" :
+                """\
+                #!/bin/env python
+
+                \"\"\"
+
+                \"\"\"
+
+                import os, sys, glob
+                from os import path as pt
+                from docopt import docopt
+
+                def main():
+                    pass
+
+                if __name__ == "__main__":
+                    args = docopt(__doc__)
+                    main(args)
+                """
+                }
+        , "fish": {
+            "position": "3",
+            "template": "#!/bin/env fish\n\n\n"
+            }
+        }
+
+# Get script type otherwise return python as default
+def get_script_type(value):
+    for k,v in templates.items():
+        if not value:       # default to python if None given
+            return "python"
+        elif value in k:
+            return k
+
+    print(f"No template for {value}, unable to create script file", file=sys.stderr)
+    sys.exit(1)
+
+# Get cursor position based on language (or dictionary key)
+def get_cursor_pos(s_type):
+    return templates[get_script_type(s_type)]["position"]
+
+# Get template string based on language
+def get_script_template(s_type):
+    return templates[get_script_type(s_type)]["template"]
+
+# Create a new file with executable bit on
+def new_file(name, content):
+    try:
+        with open(name, "x") as f:
+            f.write(textwrap.dedent(content))
+            os.fchmod(f.fileno(), 0o700)
+    except Exception as e:
+        print(f"Unable to create script file due to following error:\n{e}", file=sys.stderr)
+        sys.exit(1)
+
+# Same as new_file but handles template selection
+def new_script(s_type, name):
+    new_file(name, get_script_template(s_type))
+
+# Open script using EDITOR environment variable, if none defaults to vi
+def open_script(s_type, s_path):
+    editor = os.getenv("EDITOR", default="vi")
+    # create a script if it does not exist
+    if not os.path.isfile(s_path):
+        new_script(s_type, os.path.basename(s_path))
+    
+    os.execlp(editor, editor, "+" + get_cursor_pos(s_type), s_path)
+
+def main(args):
+    script_name = args["<name>"]
+    script_type = args["<type>"]
+
+    open_script(script_type, script_name)
+
+if __name__ == "__main__":
+    main(docopt(__doc__))
