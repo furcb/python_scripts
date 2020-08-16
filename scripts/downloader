@@ -1,0 +1,120 @@
+#!/bin/env python
+
+"""Downloader
+
+Generic downloader of files
+
+Usage:
+    downloader [options] <file>
+
+Arguments:
+    <file>      line delimited file, can specify useragent::text, title::css selector, links::css
+                    selector. rest are urls to pages that the data is on.
+
+Options:
+    --use-filename      Uses file name instead of title that is obtained from the page
+    -n, --dry-run       Don't download files, just output information
+"""
+
+import os, sys, glob
+from os import path as pt
+from docopt import docopt
+
+import time
+import requests as rq
+from bs4 import BeautifulSoup as Bsp
+
+WAIT_TIME = 1
+
+# Parses the custom "links file" and retrieves useragent, css selector, and links.
+def parse_links_file(lines):
+    context = {}
+    urls = []
+    for line in lines:
+        if "::" in line:
+            header = str.split(line, "::")
+            context[header[0]] = "".join(header[1:]).strip()
+        else:
+            urls.append(line.strip())
+    return (context, urls)
+
+# File open helper
+def get_file(path):
+    lines = None
+    try:
+        with open(path, "r") as f:
+            lines = f.readlines()
+            f.close()
+    except Exception as e:
+        print(f"Failed to open: \n\t{path}\n\t{e}")
+    return lines
+
+# Will return dictionary with css paths and urls given a file path
+def load_file(path):
+    lines = get_file(path)
+    return parse_links_file(lines)
+
+# Request helper
+def get_url(url, useragent):
+    headers = {
+            "User-Agent": useragent
+            }
+
+    return rq.get(url, headers=headers)
+
+# Stream Request helper
+def get_url_stream(url, useragent):
+    headers = {
+            "User-Agent": useragent
+            }
+
+    return rq.get(url, headers=headers, stream=True)
+
+# BS4 soup helper
+def get_soup_data(html, css_path):
+    soup = Bsp(html, features="lxml")
+    return soup.select(css_path)
+
+# Download HTML pages
+def download_information(urls, context):
+    parsed_data = []
+    for url in urls[:1]:
+        print(f"getting: {url}")
+        res = get_url(url, context["useragent"])
+        if res.status_code == 200:
+            title = get_soup_data(res.text, context["title"])
+            links = get_soup_data(res.text, context["links"])
+            parsed_data.append((title, links))
+        else:
+            print(f"Bad status code: {res.status_code}, skipping this one.")
+        # wait before issuing another request
+        time.sleep(WAIT_TIME)
+    return parsed_data
+
+# Download file/data, uses stream buffer
+#   default is to load entire file to ram and then write to file, which is not good for large files
+def download_file(path, name, url, context):
+    with get_url_stream(url, context["useragent"]) as r:
+        r.raise_for_status()
+        with open(pt.join(path, name), "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+# Download all files in a tuple list
+#   expected [(title, url), ...]
+def download_files(parsed_pages, path="./"):
+    for p in parsed_pages:
+        print(p)
+        name = p[0][0].get_text()
+        url = p[1][0].get("href")
+        download_file(path, name, url)
+
+def main(args):
+    (context, urls) = load_file(args["<file>"])
+    parsed_pages = download_information(urls, context)
+    if not args["--dry-run"]:
+        download_files(parsed_pages)
+
+if __name__ == "__main__":
+    args = docopt(__doc__)
+    main(args)

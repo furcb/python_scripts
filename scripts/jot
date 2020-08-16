@@ -1,0 +1,166 @@
+#!/bin/env python
+
+# TODO: search dates correctly for open and new
+# TODO: add automatic journal directory creation using .local/jot/<name_of_journal> as default
+
+"""jot
+
+Simple interfaces for creating journal entries using markdown with a basic template.
+
+jot will attempt to always be minimal and require as little input from the user as possible. This
+reduces friction increasing consistency of entries.
+
+Supported date formats are yyyymmdd or yymmdd.
+
+Usage:
+    jot [options] [(list|new|open)] [<date>]
+
+Arguments:
+    [<date>]    Partial or whole, will return best and most recent match. Augments commands.
+
+Commands:
+    new     Will create a new journal entry
+    open    Opens most current entry
+    list    Lists entries by date
+
+Options:
+    -d <dir>, --journal-dir <dir>   directory for journal entries
+"""
+
+import os, sys, glob, textwrap, yaml
+from os import path as pt
+from docopt import docopt
+from datetime import date
+from xdg import BaseDirectory as xbd
+from yaml import Loader
+from time import localtime, strftime
+
+# When program name is needed for things like xdg paths
+NAME = "jot"
+CONFIG_NAME = "config.yaml"
+
+# A default config in yaml
+DEFAULT_CONFIG = """
+journal_dir: "./journal_entries"
+template: "
+\n### {date}
+
+"
+"""
+
+# Creates a new file in path/file and writes the default config template
+def new_config_file(path):
+    if not pt.isfile(path):
+        try:
+            with open(path, "x") as f:
+                f.write(DEFAULT_CONFIG)
+                os.fchmod(f.fileno(), 0o660)
+                f.close()
+        except Exception as e:
+            print(f"Failed to create config file at {path} due to:\n{e}")
+            sys.exit(1)
+
+# Opens yaml configuration file
+def load_config(directory, name):
+    config_parsed = None
+    config_path = pt.join(directory, name)
+    new_config_file(config_path)
+
+    try:
+        with open(config_path, "r") as f:
+            config_data = f.readlines()
+            config_data = "".join(config_data)
+            config_parsed = yaml.load(config_data, Loader=Loader)
+            f.close()
+    except Exception as e:
+        print(f"Failed to load config at {config_path} due to:\n{e}")
+        sys.exit(1)
+    return config_parsed
+
+# 
+def get_journal_dir(args, config):
+    if args["--journal-dir"]:
+        return args["--journal-dir"]
+    else:
+        return config["journal_dir"]
+
+# Returns a list of all entries in the specified path
+def get_entries(path):
+    return str.join("|", glob.glob(pt.join(path, "*.md"), recursive=True))
+
+# Prints a list entry filenames to the terminal
+def print_list(entries, date=None):
+    to_print = []
+    for entry in entries.split("|"):
+        if date and date in entry:
+            to_print.append(entry)
+        elif not date:
+            to_print.append(entry)
+
+    print(str.join("\n", to_print))
+
+# Opens a new file and appends the file using the template provided
+def create_entry(path, template):
+    try:
+        with open(path, "x") as f:
+            f.write(textwrap.dedent(template))
+            os.fchmod(f.fileno(), 0o660)
+            f.close()
+    except Exception as e:
+        print(f"Failed to create entry: {path} due to the following error:\n{e}", file=sys.stderr)
+        sys.exit(1)
+
+# Determines template data
+def new_entry(path, name, template):
+    entry_path = pt.join(path, name)
+    if not pt.exists(entry_path):
+        format_values = { "date": strftime("%a %d %b %Y %I:%M:%S %p %Z", localtime()) }
+        create_entry(entry_path, template.format(**format_values))
+    else:
+        print(f"{path} already exists and is not a file.", file=sys.stderr)
+        sys.exit(1)
+
+# Opens entry in the editor specified in the EDITOR environment variable
+def open_entry(path):
+    editor = os.getenv("EDITOR", default="vi")
+
+    if pt.isfile(path):
+        if "vi" in editor:
+            os.execlp(editor, editor, "+$", path)
+        else:
+            os.execlp(editor, editor, path)
+    else:
+        print(f"Entry {pt.basename(path)} does not exist, please create it")
+        sys.exit(0)
+
+def main(args):
+    # Retrieving config and all other user data
+    config_dir = xbd.save_config_path(NAME)
+    config = load_config(config_dir, CONFIG_NAME)
+    journal_dir = get_journal_dir(args, config)
+    journal_entries = get_entries(journal_dir)
+
+    # Generate a date for "today" unless user specifies otherwise
+    if args["<date>"]:
+        entry = args["<date>"] + ".md"
+    else:
+        entry = date.today().strftime("%Y%m%d") + ".md"
+
+    # Commands
+    if args["list"]:
+        print_list(journal_entries, date=args["<date>"])
+    elif args["new"]:
+        new_entry(journal_dir, entry, config["template"])
+        open_entry(pt.join(journal_dir, entry))
+    elif args["open"]:
+        open_entry(pt.join(journal_dir, entry))
+    else: #no command given try open then new_entry
+        if entry in journal_entries:
+            open_entry(pt.join(journal_dir, entry))
+        else:
+            new_entry(journal_dir, entry, config["template"])
+            open_entry(pt.join(journal_dir, entry))
+
+if __name__ == "__main__":
+    args = docopt(__doc__)
+    main(args)
